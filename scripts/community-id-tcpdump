@@ -1,0 +1,47 @@
+#! /bin/env python
+"""
+An example of Community ID use based on high-level, textual
+addresses / ports as input. This script parses tcpdump output on stdin
+and augments it on stdout with Community ID strings. Parsing is
+clearly rough and simplistic, and kicks in for TCP only, but you get
+the idea.
+"""
+import argparse
+import sys
+
+import communityid
+
+def main():
+    parser = argparse.ArgumentParser(description='Community ID tcpdump filter')
+    parser.add_argument('--seed', type=int, default=0, metavar='NUM',
+                        help='Seed value for hash operations')
+    parser.add_argument('--no-base64', action='store_true', default=False,
+                        help="Don't base64-encode the SHA1 binary value")
+
+    args = parser.parse_args()
+    commid = communityid.CommunityID(args.seed, not args.no_base64)
+
+    for line in sys.stdin:
+        parts = line.split()
+        try:
+            dir_arrow_idx = parts.index('>')
+            src = parts[dir_arrow_idx-1].rsplit('.', 1)
+            dst = parts[dir_arrow_idx+1].rstrip(':').rsplit('.', 1)
+            is_tcp = parts[dir_arrow_idx+2] == 'Flags'
+
+            if is_tcp and len(src) == 2 and len(dst) == 2:
+                tpl = communityid.FlowTuple.make_tcp(src[0], dst[0], src[1], dst[1])
+                res = commid.calc(tpl)
+                parts[dir_arrow_idx-1] = '%s %s:%s' % (res, src[0], src[1])
+                print(' '.join(parts))
+                continue
+
+        except ValueError:
+            pass
+
+        print(line.rstrip())
+
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())
