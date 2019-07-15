@@ -24,7 +24,14 @@ Here's what it looks like:
 
 This will print "1:mgRgpIZSu0KHDp/QrtcWZpkJpMU=".
 
-The package includes two sample applications:
+The package includes three sample applications:
+
+- [community-id](https://github.com/corelight/pycommunityid/blob/master/scripts/community-id),
+  which calculates the ID directly for given flow tuples. It supports
+  a small but growing list of parsers. Example:
+
+    $ community-id tcp 10.0.0.1 10.0.0.2 10 20
+    1:9j2Dzwrw7T9E+IZi4b4IVT66HBI=
 
 - [community-id-pcap](https://github.com/corelight/pycommunityid/blob/master/scripts/community-id-pcap),
   which iterates over a pcap via dpkt and renders
