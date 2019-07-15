@@ -1,8 +1,6 @@
 """
 Helpers to help deal with both Python 2 and 3.
 """
-from builtins import str
-
 # Provide a way to determine whether an object is an instance of the
 # newer IP address abstractions. This currently does not support the
 # older Google ipaddr package.
