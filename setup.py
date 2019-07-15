@@ -13,7 +13,10 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/corelight/pycommunityid",
     packages=['communityid'],
-    scripts=['scripts/community-id-pcap', 'scripts/community-id-tcpdump'],
+    scripts=[
+        'scripts/community-id',
+        'scripts/community-id-pcap',
+        'scripts/community-id-tcpdump'],
     test_suite="tests.communityid_test",
     classifiers=[
         "Programming Language :: Python :: 3",

@@ -1,0 +1,126 @@
+#! /bin/env python
+"""
+This script lets you compute Community ID values for specific flow tuples.
+You provide the tuple parts, it provides the ID.
+"""
+import abc
+import argparse
+import socket
+import sys
+
+import communityid
+
+class TupleParser:
+    @abc.abstractmethod
+    def parse(self, parts):
+        """
+        Parses the given line parts list into a FlowTuple, or None on error.
+        """
+        return None
+
+    @staticmethod
+    def is_ipaddr(val):
+        try:
+            socket.inet_aton(val)
+            return True
+        except socket.error:
+            return False
+
+    @staticmethod
+    def is_port(val):
+        try:
+            port = int(val)
+            return 0 <= port <= 65535
+        except ValueError:
+            return False
+
+class DefaultParser(TupleParser):
+    """
+    Our default parser wants the protocol first, then the
+    saddr/daddr/sport/dport tuple.
+    """
+    def parse(self, parts):
+        if len(parts) != 5:
+            return None
+
+        proto = communityid.get_proto(parts[0])
+        if proto is None:
+            return None
+
+        if not (self.is_ipaddr(parts[1]) and
+                self.is_ipaddr(parts[2]) and
+                self.is_port(parts[3]) and
+                self.is_port(parts[4])):
+            return None
+
+        return communityid.FlowTuple(proto, parts[1], parts[2],
+                                     int(parts[3]), int(parts[4]))
+
+class ZeekLogsParser(TupleParser):
+    """
+    In Zeek's logs the field order is saddr/sport/daddr/dport/proto.
+    """
+    def parse(self, parts):
+        if len(parts) != 5:
+            return None
+
+        proto = communityid.get_proto(parts[4])
+        if proto is None:
+            return None
+
+        if not (self.is_ipaddr(parts[0]) and
+                self.is_port(parts[1]) and
+                self.is_ipaddr(parts[2]) and
+                self.is_port(parts[3])):
+            return None
+
+        return communityid.FlowTuple(proto, parts[0], parts[2],
+                                     int(parts[1]), int(parts[3]))
+
+def main():
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="""Community ID calculator
+
+This calculator prints the Community ID value for a given tuple
+to stdout. It supports the following formats for the tuple:
+
+  [protocol] [src address] [dst address] [src port] [dst port]
+  [src address] [src port] [dst address] [dst port] [protocol]
+
+The protocol is either a numeric IP protocol number, or one of
+the constants "icmp", "icmp6", "tcp", "udp", or "sctp". Case
+does not matter.
+""")
+    parser.add_argument('--seed', type=int, default=0, metavar='NUM',
+                        help='Seed value for hash operations')
+    parser.add_argument('--no-base64', action='store_true', default=False,
+                        help="Don't base64-encode the SHA1 binary value")
+    parser.add_argument('flowtuple', nargs=argparse.REMAINDER,
+                        help='Flow tuple, in one of the forms described above')
+    args = parser.parse_args()
+
+    if not args.flowtuple:
+        print('Need flow tuple as additional arguments.')
+        return 1
+
+    commid = communityid.CommunityID(args.seed, not args.no_base64)
+
+    for parser in (DefaultParser(), ZeekLogsParser()):
+        tpl = parser.parse(args.flowtuple)
+        if tpl is None:
+            continue
+
+        res = commid.calc(tpl)
+
+        if res is None:
+            print(commid.get_error())
+            return 1
+
+        print(res)
+        return 0
+
+    return 1
+
+if __name__ == '__main__':
+    sys.exit(main())
