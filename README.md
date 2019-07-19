@@ -7,6 +7,16 @@ flow hashing standard.
 
 It supports Python versions 2.7+ and 3+.
 
+Installation
+------------
+
+This package is available [on PyPI](https://pypi.org/project/communityid/), therefore:
+
+    pip install communityid
+
+Usage
+-----
+
 The API breaks the computation into two steps: (1) creation of a flow
 tuple object, (2) computation of the Community ID string on this
 object. It supports various input types in order to accommodate
