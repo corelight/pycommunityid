@@ -9,6 +9,7 @@ setuptools.setup(
     author="Christian Kreibich",
     author_email="christian@corelight.com",
     description="Community ID flow hashing",
+    license="BSD",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/corelight/pycommunityid",
