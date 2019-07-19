@@ -7,7 +7,7 @@ setuptools.setup(
     name="communityid",
     version="1.0",
     author="Christian Kreibich",
-    author_email="christian@corelightcom",
+    author_email="christian@corelight.com",
     description="Community ID flow hashing",
     long_description=long_description,
     long_description_content_type="text/markdown",
