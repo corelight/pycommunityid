@@ -53,7 +53,7 @@ class PcapIterator(object):
         self._pcap = pcap
 
     def process(self):
-        with open(self._pcap) as hdl:
+        with open(self._pcap, 'r+b') as hdl:
             reader = dpkt.pcap.Reader(hdl)
             for tstamp, pktdata in reader:
                 self._process_packet(tstamp, pktdata)
