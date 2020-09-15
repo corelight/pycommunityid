@@ -14,68 +14,68 @@ class TupleParser:
     @abc.abstractmethod
     def parse(self, parts):
         """
-        Parses the given line parts list into a FlowTuple, or None on error.
+        Parses the given line parts list into a FlowTuple. Returns
+        either a pair (FlowTuple instance, None) if successful, or
+        (None, error) with an error string message in case of
+        problems.
         """
-        return None
-
-    @staticmethod
-    def is_ipaddr(val):
-        try:
-            socket.inet_aton(val)
-            return True
-        except socket.error:
-            return False
-
-    @staticmethod
-    def is_port(val):
-        try:
-            port = int(val)
-            return 0 <= port <= 65535
-        except ValueError:
-            return False
+        return None, None
 
 class DefaultParser(TupleParser):
     """
     Our default parser wants the protocol first, then the
-    saddr/daddr/sport/dport tuple.
+    saddr/daddr/sport/dport tuple, with the ports being optional.
     """
     def parse(self, parts):
-        if len(parts) != 5:
-            return None
+        num_parts = len(parts)
+
+        if num_parts not in [3, 5]:
+            return None, 'Need either 3 or 5 tuple components'
 
         proto = communityid.get_proto(parts[0])
         if proto is None:
-            return None
+            return None, 'Could not parse IP protocol number'
 
-        if not (self.is_ipaddr(parts[1]) and
-                self.is_ipaddr(parts[2]) and
-                self.is_port(parts[3]) and
-                self.is_port(parts[4])):
-            return None
+        sport, dport = None, None
 
-        return communityid.FlowTuple(proto, parts[1], parts[2],
-                                     int(parts[3]), int(parts[4]))
+        if num_parts == 5:
+            if (not communityid.FlowTuple.is_port(parts[3]) or
+                not communityid.FlowTuple.is_port(parts[4])):
+                return None, 'Could not parse port numbers'
+            sport, dport = int(parts[3]), int(parts[4])
+
+        try:
+            return communityid.FlowTuple(
+                proto, parts[1], parts[2], sport, dport), None
+        except communityid.FlowTupleError as err:
+            return None, repr(err)
 
 class ZeekLogsParser(TupleParser):
     """
     In Zeek's logs the field order is saddr/sport/daddr/dport/proto.
+    This parser simplifies cut'n'paste of those log parts. This
+    assumes Zeek logs for 5-tuple flow identifiers. If you encounter a
+    need for 3-tuple ones, please file a ticket.
     """
     def parse(self, parts):
         if len(parts) != 5:
-            return None
+            return None, 'Need 5-part tuple when parsing Zeek logs'
 
         proto = communityid.get_proto(parts[4])
         if proto is None:
-            return None
+            return None, 'Could not parse IP protocol number'
 
-        if not (self.is_ipaddr(parts[0]) and
-                self.is_port(parts[1]) and
-                self.is_ipaddr(parts[2]) and
-                self.is_port(parts[3])):
-            return None
+        if not (communityid.FlowTuple.is_ipaddr(parts[0]) and
+                communityid.FlowTuple.is_port(parts[1]) and
+                communityid.FlowTuple.is_ipaddr(parts[2]) and
+                communityid.FlowTuple.is_port(parts[3])):
+            return None, 'Need two IP addresses and port numbers'
 
-        return communityid.FlowTuple(proto, parts[0], parts[2],
-                                     int(parts[1]), int(parts[3]))
+        try:
+            return communityid.FlowTuple(proto, parts[0], parts[2],
+                                         int(parts[1]), int(parts[3])), None
+        except communityid.FlowTupleError as err:
+            return None, repr(err)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -85,6 +85,7 @@ def main():
 This calculator prints the Community ID value for a given tuple
 to stdout. It supports the following formats for the tuple:
 
+  [protocol] [src address] [dst address]
   [protocol] [src address] [dst address] [src port] [dst port]
   [src address] [src port] [dst address] [dst port] [protocol]
 
@@ -96,30 +97,35 @@ does not matter.
                         help='Seed value for hash operations')
     parser.add_argument('--no-base64', action='store_true', default=False,
                         help="Don't base64-encode the SHA1 binary value")
+    parser.add_argument('--verbose', action='store_true', default=False,
+                        help='Enable verbose output')
     parser.add_argument('flowtuple', nargs=argparse.REMAINDER,
                         help='Flow tuple, in one of the forms described above')
     args = parser.parse_args()
 
     if not args.flowtuple:
-        print('Need flow tuple as additional arguments.')
+        sys.stderr.write('Need flow tuple as additional arguments.\n')
         return 1
 
     commid = communityid.CommunityID(args.seed, not args.no_base64)
 
     for parser in (DefaultParser(), ZeekLogsParser()):
-        tpl = parser.parse(args.flowtuple)
+        tpl, msg = parser.parse(args.flowtuple)
         if tpl is None:
+            if args.verbose:
+                sys.stderr.write('%s failure: %s\n' %
+                                 (parser.__class__.__name__, msg))
             continue
 
         res = commid.calc(tpl)
-
         if res is None:
-            print(commid.get_error())
+            sys.stderr.write(commid.get_error() + '\n')
             return 1
 
         print(res)
         return 0
 
+    sys.stderr.write('Error in tuple string %s.\n' % args.flowtuple)
     return 1
 
 if __name__ == '__main__':

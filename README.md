@@ -14,6 +14,10 @@ This package is available [on PyPI](https://pypi.org/project/communityid/), ther
 
     pip install communityid
 
+To install locally from a git clone, you can use also use pip, e.g. by saying
+
+    pip install -U .
+
 Usage
 -----
 
@@ -55,7 +59,16 @@ The package includes three sample applications:
   package's "high-level" API, using ASCII representations of tuple
   values.
 
-The package also contains a comprehensive testsuite that can serve as
-reference values to verify the correctness of other
-implementations. See the contents of the testing/ directory for
-details.
+Testing
+-------
+
+The package includes a unittest testsuite in the tests directory that
+runs without installation of the module. You can invoke it as usual,
+e.g. via:
+
+    python -m unittest communityid_test
+
+or
+
+    nose2 -C --coverage ../communityid --coverage-report term-missing communityid_test
+

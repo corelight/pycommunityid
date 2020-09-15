@@ -1,6 +1,11 @@
+"""
+Unit tests for the Community ID package. Run with something like:
+nose2 -C --coverage ../communityid --coverage-report term-missing communityid_test
+"""
 import os
 import socket
 import struct
+import subprocess
 import sys
 import unittest
 
@@ -10,7 +15,7 @@ except ImportError:
     pass # Pity!
 
 LOCAL_DIR=os.path.dirname(__file__)
-sys.path.append(os.path.abspath(os.path.join(LOCAL_DIR, '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(LOCAL_DIR, '..')))
 
 import communityid
 import communityid.compat
@@ -40,7 +45,7 @@ class TestCommunityID(unittest.TestCase):
                              msg='%s: %s result is %s, should be %s, err: %s'
                              % (cid, cft, res, correct_res, cid.get_error()))
 
-    def verify_tuples(self, tuples, high_level_func, proto_num, af_family):
+    def verify_full_tuples(self, tuples, high_level_func, proto_num, af_family):
         """
         Verifies for each of the provided flow tuples and expected
         Community ID strings that the computation produces the
@@ -85,12 +90,48 @@ class TestCommunityID(unittest.TestCase):
             except RuntimeError:
                 pass
 
+    def verify_short_tuples(self, tuples, high_level_func, proto_num, af_family):
+        """
+        Similar to verify_full_tuples, but for the IP-only tuple scenario.
+        """
+        for tpl in tuples:
+            # Using the convenience wrapper:
+            cft = high_level_func(tpl[0], tpl[1], proto_num)
+            self.assertEqualID(cft, tpl[2:])
+
+            # Using specific protocol number:
+            cft = communityid.FlowTuple(proto_num, tpl[0], tpl[1])
+            self.assertEqualID(cft, tpl[2:])
+
+            # Using packed NBO, as when grabbing from a packet header:
+            cft = communityid.FlowTuple(
+                proto_num,
+                socket.inet_pton(af_family, tpl[0]),
+                socket.inet_pton(af_family, tpl[1]))
+            self.assertEqualID(cft, tpl[2:])
+
+            # Using a mix, ewww.
+            cft = communityid.FlowTuple(
+                proto_num, tpl[0], socket.inet_pton(af_family, tpl[1]))
+            self.assertEqualID(cft, tpl[2:])
+
+            # Using Python 3.3+'s ipaddress types or their 2.x
+            # backport:
+            try:
+                cft = communityid.FlowTuple(
+                    proto_num,
+                    communityid.compat.ip_address(tpl[0]),
+                    communityid.compat.ip_address(tpl[1]))
+                self.assertEqualID(cft, tpl[2:])
+            except RuntimeError:
+                pass
+
     # All of the following tests would be tidier with the DDT module,
     # but I'm reluctant to add third-party dependencies for
     # testing. --cpk
 
     def test_icmp(self):
-        self.verify_tuples(
+        self.verify_full_tuples(
             [
                 ['192.168.0.89', '192.168.0.1', 8, 0,
                  '1:X0snYXpgwiv9TZtqg64sgzUn6Dk=',
@@ -129,7 +170,7 @@ class TestCommunityID(unittest.TestCase):
             socket.AF_INET)
 
     def test_icmp6(self):
-        self.verify_tuples(
+        self.verify_full_tuples(
             [
                 ['fe80::200:86ff:fe05:80da', 'fe80::260:97ff:fe07:69ea', 135, 0,
                  '1:dGHyGvjMfljg6Bppwm3bg0LO8TY=',
@@ -156,7 +197,7 @@ class TestCommunityID(unittest.TestCase):
             socket.AF_INET6)
 
     def test_sctp(self):
-        self.verify_tuples(
+        self.verify_full_tuples(
             [
                 ['192.168.170.8', '192.168.170.56', 7, 80,
                  '1:jQgCxbku+pNGw8WPbEc/TS/uTpQ=',
@@ -173,7 +214,7 @@ class TestCommunityID(unittest.TestCase):
             socket.AF_INET)
 
     def test_tcp(self):
-        self.verify_tuples(
+        self.verify_full_tuples(
             [
                 ['128.232.110.120', '66.35.250.204', 34855, 80,
                  '1:LQU9qZlK+B5F3KDmev6m5PMibrg=',
@@ -190,7 +231,7 @@ class TestCommunityID(unittest.TestCase):
             socket.AF_INET)
 
     def test_udp(self):
-        self.verify_tuples(
+        self.verify_full_tuples(
             [
                 ['192.168.1.52', '8.8.8.8', 54585, 53,
                  '1:d/FP5EW3wiY1vCndhwleRRKHowQ=',
@@ -206,6 +247,69 @@ class TestCommunityID(unittest.TestCase):
             communityid.PROTO_UDP,
             socket.AF_INET)
 
+    def test_ip(self):
+        self.verify_short_tuples(
+            [
+                ['10.1.24.4', '10.1.12.1',
+                 '1:/nQI4Rh/TtY3mf0R2gJFBkVlgS4=',
+                 '1:fe7408e1187f4ed63799fd11da0245064565812e',
+                 '1:BK3BVW3U2eemuwVQVN3zd/GULno='],
+
+                ['10.1.12.1', '10.1.24.4',
+                 '1:/nQI4Rh/TtY3mf0R2gJFBkVlgS4=',
+                 '1:fe7408e1187f4ed63799fd11da0245064565812e',
+                 '1:BK3BVW3U2eemuwVQVN3zd/GULno='],
+            ],
+            communityid.FlowTuple.make_ip,
+            46, socket.AF_INET)
+
+    def test_inputs(self):
+        # Need protocol
+        with self.assertRaises(communityid.FlowTupleError):
+            tpl = communityid.FlowTuple(
+                None, '1.2.3.4', '5.6.7.8')
+
+        # Need both IP addresses
+        with self.assertRaises(communityid.FlowTupleError):
+            tpl = communityid.FlowTuple(
+                communityid.PROTO_TCP, '1.2.3.4', None)
+        with self.assertRaises(communityid.FlowTupleError):
+            tpl = communityid.FlowTuple(
+                communityid.PROTO_TCP, None, '5.6.7.8')
+
+        # Need parseable IP addresses
+        with self.assertRaises(communityid.FlowTupleError):
+            tpl = communityid.FlowTuple(
+                communityid.PROTO_TCP, 'ohdear.com', '5.6.7.8')
+        with self.assertRaises(communityid.FlowTupleError):
+            tpl = communityid.FlowTuple(
+                communityid.PROTO_TCP, '1.2.3.4', 'ohdear.com')
+
+        # Need two valid ports
+        with self.assertRaises(communityid.FlowTupleError):
+            tpl = communityid.FlowTuple(
+                communityid.PROTO_TCP, '1.2.3.4', '5.6.7.8', 23, None)
+        with self.assertRaises(communityid.FlowTupleError):
+            tpl = communityid.FlowTuple(
+                communityid.PROTO_TCP, '1.2.3.4', '5.6.7.8', None, 23)
+        with self.assertRaises(communityid.FlowTupleError):
+            tpl = communityid.FlowTuple(
+                communityid.PROTO_TCP, '1.2.3.4', '5.6.7.8', "23/tcp", 23)
+        with self.assertRaises(communityid.FlowTupleError):
+            tpl = communityid.FlowTuple(
+                communityid.PROTO_TCP, '1.2.3.4', '5.6.7.8', 23, "23/tcp")
+
+        # Need ports with port-enabled protocol
+        with self.assertRaises(communityid.FlowTupleError):
+            tpl = communityid.FlowTuple(
+                communityid.PROTO_TCP, '1.2.3.4', '5.6.7.8')
+
+    def test_get_proto(self):
+        self.assertEqual(communityid.get_proto(23), 23)
+        self.assertEqual(communityid.get_proto("23"), 23)
+        self.assertEqual(communityid.get_proto("tcp"), 6)
+        self.assertEqual(communityid.get_proto("TCP"), 6)
+        self.assertEqual(communityid.get_proto("23/tcp"), None)
 
 class LintCommunityID(unittest.TestCase):
 
@@ -224,3 +328,29 @@ class LintCommunityID(unittest.TestCase):
 
         self.assertTrue(out.getvalue().find(' error ') < 0,
                         msg='Pylint error: ' + out.getvalue())
+
+
+class TestCommands(unittest.TestCase):
+
+    def test_communityid(self):
+        out = subprocess.check_output(
+            ['../scripts/community-id', 'tcp', '10.0.0.1', '10.0.0.2', '10', '20'])
+        self.assertEqual(out, b'1:9j2Dzwrw7T9E+IZi4b4IVT66HBI=\n')
+
+    def test_communityid_pcap(self):
+        out = subprocess.check_output(
+            ['../scripts/community-id-pcap', 'tcp.pcap'])
+
+        first_line = out.decode('ascii').split('\n')[0].strip()
+        self.assertEqual(first_line, '1071580904.891921 | 1:LQU9qZlK+B5F3KDmev6m5PMibrg= | 128.232.110.120 66.35.250.204 6 34855 80')
+
+    def test_communityid_tcpdump(self):
+        # This uses subprocess.check_output(..., input=...) which was added in 3.4:
+        if sys.version_info[0] < 3 or sys.version_info[1] < 4:
+            self.skipTest('Needs Python 3.4 or greater')
+
+        out = subprocess.check_output(
+            ['../scripts/community-id-tcpdump'], input=b'1071580904.891921 IP 128.232.110.120.34855 > 66.35.250.204.80: Flags [S], seq 3201037957, win 5840, options [mss 1460,sackOK,TS val 87269134 ecr 0,nop,wscale 0], length 0')
+
+        first_line = out.decode('ascii').split('\n')[0].strip()
+        self.assertEqual(first_line, '1071580904.891921 IP 1:LQU9qZlK+B5F3KDmev6m5PMibrg= 128.232.110.120:34855 > 66.35.250.204.80: Flags [S], seq 3201037957, win 5840, options [mss 1460,sackOK,TS val 87269134 ecr 0,nop,wscale 0], length 0')

@@ -8,6 +8,7 @@ import socket
 import string
 import struct
 
+from communityid import error
 from communityid import compat
 from communityid import icmp
 from communityid import icmp6
@@ -22,17 +23,76 @@ PROTO_UDP = 17
 PROTO_ICMP6 = 58
 PROTO_SCTP = 132
 
+# The set of protocols we explicitly support as port-enabled:
+# Community ID computations on those protocols should be based on a
+# five-tuple.
+PORT_PROTOS = set([PROTO_ICMP, PROTO_TCP, PROTO_UDP, PROTO_ICMP6, PROTO_SCTP])
+
 class FlowTuple:
     """
-    Five-tuples of network flows, used as input for the Community ID
-    computation. These tuple objects are flexible regarding the input
-    data types -- for the addresses you can use NBO byte-strings or
-    ASCII, for example.
+    Tuples of network flow endpoints, used as input for the Community
+    ID computation. These tuple objects are flexible regarding the
+    input data types -- for the addresses you can use NBO byte-strings
+    or ASCII, for example. They usually are 5-tuples of address & port
+    pairs, plus IP protocol number, but port-less tuples are supported
+    for less common IP payloads.
     """
-    def __init__(self, proto, saddr, daddr, sport=0, dport=0, is_one_way=False):
+
+    def __init__(self, proto, saddr, daddr, sport=None, dport=None,
+                 is_one_way=False):
+        """Tuple initializer.
+
+        The proto argument is a non-negative integer and represents an
+        IP protocol number, e.g. 6 for TCP. You can use the PROTO_*
+        constants if convenient, and communityid.get_proto() to help
+        convert to integer.
+
+        The saddr and daddr arguments are source & destination IP
+        addresses, either IPv4 or IPv6. Multiple data types are
+        supported, including bytes (as str in older Pythons, or the
+        explicit bytes type), IPv4Address, IPv6Address, and string
+        representations.
+
+        The sport and dport arguments are numeric port numbers, either
+        provided as ints or in packed 16-bit network byte order. When
+        the protocol number is one of PORT_PROTOS (TCP, UDP, etc),
+        they are required. For other IP protocols they are optional.
+
+        The optional Boolean is_one_way argument indicates whether the
+        tuple captures a bidirectional flow (the default) or
+        not. Setting this to true means that the computation will
+        consider the tuple directional and not try to pair up with
+        flipped-endpoint tuples. Normally you don't need to pass this.
+
+        This can raise FlowTupleErrors when the input is inconsistent.
+
+        """
         self.proto = proto
         self.saddr, self.daddr = saddr, daddr
         self.sport, self.dport = sport, dport
+
+        if proto is None or type(proto) != int:
+            raise error.FlowTupleError('Need numeric protocol number')
+
+        if saddr is None or daddr is None:
+            raise error.FlowTupleError('Need source and destination address')
+
+        if not self.is_ipaddr(saddr):
+            raise error.FlowTupleError('Unsupported format for source IP address "%s"' % saddr)
+        if not self.is_ipaddr(daddr):
+            raise error.FlowTupleError('Unsupported format for destination IP address "%s"' % daddr)
+
+        if ((sport is None and dport is not None) or
+            (dport is None and sport is not None)):
+            raise error.FlowTupleError('Need either both or no port numbers')
+
+        if sport is not None and not self.is_port(sport):
+            raise error.FlowTupleError('Source port "%s" invalid' % sport)
+        if dport is not None and not self.is_port(dport):
+            raise error.FlowTupleError('Destination port "%s" invalid' % dport)
+
+        if proto in PORT_PROTOS and sport is None:
+            raise error.FlowTupleError('Need port numbers for port-enabled protocol %s' % proto)
 
         # Our ICMP handling directly mirrors that of Zeek, since it
         # tries hardest to map ICMP into traditional 5-tuples. For
@@ -42,6 +102,10 @@ class FlowTuple:
         # stores this result, assuming by default we're bidirectional.
 
         self.is_one_way = is_one_way
+
+        # The rest of the constructor requires ports.
+        if sport is None or dport is None:
+            return
 
         # If we're explicitly told this is a one-way flow-tuple, we
         # don't need to consider directionality further.  And, testing
@@ -81,6 +145,9 @@ class FlowTuple:
         elif not all(c in string.printable for c in daddr):
             daddr = self._addr_to_ascii(daddr)
 
+        if sport is None or dport is None:
+            return '[%s] %s -> %s' % (self.proto, saddr, daddr)
+
         if not isinstance(sport, int):
             sport = struct.unpack('!H', sport)[0]
         if not isinstance(self.dport, int):
@@ -90,7 +157,12 @@ class FlowTuple:
 
     def is_ordered(self):
         return (self.is_one_way or self.saddr < self.daddr or
-                (self.saddr == self.daddr and self.sport < self.dport))
+                (self.saddr == self.daddr and
+                 self.sport is not None and self.dport is not None and
+                 self.sport < self.dport))
+
+    def has_ports(self):
+        return self.sport is not None and self.dport is not None
 
     def in_order(self):
         """
@@ -125,6 +197,54 @@ class FlowTuple:
         return FlowTuple(self.proto, saddr, daddr, sport, dport, self.is_one_way)
 
     @staticmethod
+    def is_ipaddr(val):
+        return (FlowTuple.addr_is_text(val) or
+                FlowTuple.addr_is_packed(val) or
+                FlowTuple.addr_is_ipaddress_type(val))
+
+    @staticmethod
+    def addr_is_text(addr):
+        for family in (socket.AF_INET, socket.AF_INET6):
+            try:
+                socket.inet_pton(family, addr)
+                return True
+            except (socket.error, TypeError):
+                pass
+
+        return False
+
+    @staticmethod
+    def addr_is_packed(addr):
+        for family in (socket.AF_INET, socket.AF_INET6):
+            try:
+                socket.inet_ntop(family, addr)
+                return True
+            except (socket.error, ValueError, TypeError):
+                pass
+
+        return False
+
+    @staticmethod
+    def addr_is_ipaddress_type(addr):
+        return compat.is_ipaddress_type(addr)
+
+    @staticmethod
+    def is_port(val):
+        try:
+            port = int(val)
+            return 0 <= port <= 65535
+        except ValueError:
+            pass
+
+        try:
+            port = struct.unpack('!H', val)[0]
+            return 0 <= port <= 65535
+        except (struct.error, IndexError, TypeError):
+            pass
+
+        return False
+
+    @staticmethod
     def _port_to_int(port):
         """Convert a port number to regular integer."""
         if isinstance(port, int):
@@ -152,15 +272,11 @@ class FlowTuple:
         if compat.is_ipaddress_type(addr):
             return addr.exploded
 
-        try:
-            return socket.inet_ntop(socket.AF_INET, addr)
-        except (socket.error, ValueError, TypeError):
-            pass
-
-        try:
-            return socket.inet_ntop(socket.AF_INET6, addr)
-        except (socket.error, ValueError, TypeError):
-            pass
+        for family in (socket.AF_INET, socket.AF_INET6):
+            try:
+                return socket.inet_ntop(family, addr)
+            except (socket.error, ValueError, TypeError):
+                pass
 
         return addr
 
@@ -169,15 +285,11 @@ class FlowTuple:
         if compat.is_ipaddress_type(addr):
             return addr.packed
 
-        try:
-            return socket.inet_pton(socket.AF_INET, addr)
-        except (socket.error, TypeError):
-            pass
-
-        try:
-            return socket.inet_pton(socket.AF_INET6, addr)
-        except (socket.error, TypeError):
-            pass
+        for family in (socket.AF_INET, socket.AF_INET6):
+            try:
+                return socket.inet_pton(family, addr)
+            except (socket.error, TypeError):
+                pass
 
         return addr
 
@@ -202,6 +314,10 @@ class FlowTuple:
     @classmethod
     def make_icmp6(cls, saddr, daddr, mtype, mcode):
         return cls(PROTO_ICMP6, saddr, daddr, int(mtype), int(mcode))
+
+    @classmethod
+    def make_ip(cls, saddr, daddr, proto):
+        return cls(proto, saddr, daddr)
 
 
 class CommunityIDBase:
@@ -261,7 +377,7 @@ class CommunityID(CommunityIDBase):
         """
         Returns an error string when problems came up during the
         computation. This is only valid directly after calc() returned
-        None, i.e., something went wrong.
+        None, i.e., something went wrong during the calculation.
         """
         return self._err
 
@@ -291,8 +407,9 @@ class CommunityID(CommunityIDBase):
             dlen += hash_update(tpl.daddr) # 4 bytes (v4 addr) or 16 bytes (v6 addr)
             dlen += hash_update(struct.pack('B', tpl.proto)) # 1 byte for transport proto
             dlen += hash_update(struct.pack('B', 0)) # 1 byte padding
-            dlen += hash_update(tpl.sport) # 2 bytes
-            dlen += hash_update(tpl.dport) # 2 bytes
+            if tpl.has_ports():
+                dlen += hash_update(tpl.sport) # 2 bytes
+                dlen += hash_update(tpl.dport) # 2 bytes
         except struct.error as err:
             self._err = 'Could not pack flow tuple: %s' % err
             return None
