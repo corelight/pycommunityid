@@ -26,6 +26,7 @@ import argparse
 import base64
 import gzip
 import hashlib
+import json
 import socket
 import struct
 import sys
@@ -49,20 +50,28 @@ from dpkt.sctp import SCTP #pylint: disable=import-error
 
 
 class PcapIterator(object):
-    def __init__(self, commid, pcap):
+    def __init__(self, commid, pcap, do_json=False):
         self._commid = commid
         self._pcap = pcap
+        self._do_json = do_json
+        self._json = {}
 
-    def process(self):
+    def process(self, do_json=False):
         if self._pcap.endswith('.gz'):
             opener=gzip.open
         else:
             opener=open
 
+        self._json = {}
+
         with opener(self._pcap, 'r+b') as hdl:
             reader = dpkt.pcap.Reader(hdl)
             for tstamp, pktdata in reader:
                 self._process_packet(tstamp, pktdata)
+
+        if self._do_json:
+            obj = [self._json[tpl] for tpl in self._json]
+            print(json.dumps(obj))
 
     def _process_packet(self, tstamp, pktdata):
         pkt = self._packet_parse(pktdata)
@@ -119,7 +128,19 @@ class PcapIterator(object):
             self._print_result(tstamp, pkt, '<not IP (???)>')
             return
 
-        self._print_result(tstamp, pkt, self._commid.calc(tpl))
+        data = tpl.get_data()
+        res = self._commid.calc(tpl)
+
+        self._json[repr(tpl)] = {
+            'proto': data.proto,
+            'saddr': data.saddr,
+            'daddr': data.daddr,
+            'sport': data.sport,
+            'dport': data.dport,
+            'communityid': res,
+        }
+
+        self._print_result(tstamp, pkt, res)
 
     def _packet_to_str(self, pkt):
         """
@@ -186,7 +207,8 @@ class PcapIterator(object):
         return pkt
 
     def _print_result(self, tstamp, pkt, res):
-        print('%10.6f | %s | %s' % (tstamp, res, self._packet_to_str(pkt)))
+        if not self._do_json:
+            print('%10.6f | %s | %s' % (tstamp, res, self._packet_to_str(pkt)))
 
 
 def main():
@@ -197,12 +219,14 @@ def main():
                         help='Seed value for hash operations')
     parser.add_argument('--no-base64', action='store_true', default=False,
                         help="Don't base64-encode the SHA1 binary value")
+    parser.add_argument('--json', action='store_true', default=False,
+                        help="Render Community ID inputs & results in JSON")
     args = parser.parse_args()
 
     commid = communityid.CommunityID(args.seed, not args.no_base64)
 
     for pcap in args.pcaps:
-        itr = PcapIterator(commid, pcap)
+        itr = PcapIterator(commid, pcap, args.json)
         itr.process()
 
     return 0

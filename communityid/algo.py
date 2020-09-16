@@ -3,6 +3,7 @@ This module implements Community ID network flow hashing.
 """
 import abc
 import base64
+import collections
 import hashlib
 import socket
 import string
@@ -37,6 +38,8 @@ class FlowTuple:
     pairs, plus IP protocol number, but port-less tuples are supported
     for less common IP payloads.
     """
+    Data = collections.namedtuple(
+        'Data', ['proto', 'saddr', 'daddr', 'sport', 'dport'])
 
     def __init__(self, proto, saddr, daddr, sport=None, dport=None,
                  is_one_way=False):
@@ -126,6 +129,21 @@ class FlowTuple:
                 self.dport = self._port_to_same(dport, self.dport)
 
     def __repr__(self):
+        data = self.get_data()
+
+        if data.sport is None or data.dport is None:
+            return '[%s] %s -> %s' % (data.proto, data.saddr, data.daddr)
+
+        return '[%s] %s/%s -> %s/%s' % (data.proto, data.saddr, data.sport,
+                                        data.daddr, data.dport)
+
+    def get_data(self):
+        """
+        Returns a FlowTuple.Data namedtuple with this flow tuple's
+        data. The protocol is an integer number (e.g. 6 for TCP),
+        saddr and daddr are ASCII-rendered/unpacked, and the ports
+        are integers or None, if absent.
+        """
         # Absent good types, make it best-effort to get these
         # renderable. If all characters are printable, we assume this
         # in not NBO.
@@ -145,15 +163,12 @@ class FlowTuple:
         elif not all(c in string.printable for c in daddr):
             daddr = self._addr_to_ascii(daddr)
 
-        if sport is None or dport is None:
-            return '[%s] %s -> %s' % (self.proto, saddr, daddr)
-
-        if not isinstance(sport, int):
+        if sport is not None and not isinstance(sport, int):
             sport = struct.unpack('!H', sport)[0]
-        if not isinstance(self.dport, int):
+        if dport is not None and not isinstance(dport, int):
             dport = struct.unpack('!H', dport)[0]
 
-        return '[%s] %s/%s -> %s/%s' % (self.proto, saddr, sport, daddr, dport)
+        return FlowTuple.Data(self.proto, saddr, daddr, sport, dport)
 
     def is_ordered(self):
         return (self.is_one_way or self.saddr < self.daddr or
