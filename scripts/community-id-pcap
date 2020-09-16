@@ -24,6 +24,7 @@ on the dpkt module and is somewhat simplistic:
 """
 import argparse
 import base64
+import gzip
 import hashlib
 import socket
 import struct
@@ -53,7 +54,12 @@ class PcapIterator(object):
         self._pcap = pcap
 
     def process(self):
-        with open(self._pcap, 'r+b') as hdl:
+        if self._pcap.endswith('.gz'):
+            opener=gzip.open
+        else:
+            opener=open
+
+        with opener(self._pcap, 'r+b') as hdl:
             reader = dpkt.pcap.Reader(hdl)
             for tstamp, pktdata in reader:
                 self._process_packet(tstamp, pktdata)
