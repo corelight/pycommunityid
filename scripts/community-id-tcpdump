@@ -1,4 +1,4 @@
-#! /bin/env python
+#! /usr/bin/env python
 """
 An example of Community ID use based on high-level, textual
 addresses / ports as input. This script parses tcpdump output on stdin

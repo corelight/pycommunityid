@@ -1,4 +1,4 @@
-#! /bin/env python
+#! /usr/bin/env python
 """
 This script computes Community ID hashes for network flows in
 provided pcaps. Provide pcaps (not pcapng) to the script and it will

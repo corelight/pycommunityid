@@ -7,6 +7,8 @@ flow hashing standard.
 
 It supports Python versions 2.7+ and 3+.
 
+![example foobar](https://github.com/corelight/pycommunityid/actions/workflows/python.yaml/badge.svg)
+
 Installation
 ------------
 
@@ -62,9 +64,9 @@ The package includes three sample applications:
 Testing
 -------
 
-The package includes a unittest testsuite in the tests directory that
-runs without installation of the module. You can invoke it as usual,
-e.g. via:
+The package includes a unittest testsuite in the `tests` directory
+that runs without installation of the module. After changing into that
+folder you can invoke it e.g. via
 
     python -m unittest communityid_test
 
@@ -72,3 +74,4 @@ or
 
     nose2 -C --coverage ../communityid --coverage-report term-missing communityid_test
 
+or by running `./communityid_test.py` directly.

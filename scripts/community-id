@@ -1,4 +1,4 @@
-#! /bin/env python
+#! /usr/bin/env python
 """
 This script lets you compute Community ID values for specific flow tuples.
 You provide the tuple parts, it provides the ID.
