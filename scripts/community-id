@@ -39,10 +39,14 @@ class DefaultParser(TupleParser):
         sport, dport = None, None
 
         if num_parts == 5:
-            if (not communityid.FlowTuple.is_port(parts[3]) or
-                not communityid.FlowTuple.is_port(parts[4])):
+            try:
+                sport, dport = int(parts[3]), int(parts[4])
+            except ValueError:
                 return None, 'Could not parse port numbers'
-            sport, dport = int(parts[3]), int(parts[4])
+
+            if (not communityid.FlowTuple.is_port(sport) or
+                not communityid.FlowTuple.is_port(dport)):
+                return None, 'Could not parse port numbers'
 
         try:
             return communityid.FlowTuple(
@@ -65,15 +69,20 @@ class ZeekLogsParser(TupleParser):
         if proto is None:
             return None, 'Could not parse IP protocol number'
 
+        try:
+            sport, dport = int(parts[1]), int(parts[3])
+        except ValueError:
+            return None, 'Could not parse port numbers'
+
         if not (communityid.FlowTuple.is_ipaddr(parts[0]) and
-                communityid.FlowTuple.is_port(parts[1]) and
+                communityid.FlowTuple.is_port(sport) and
                 communityid.FlowTuple.is_ipaddr(parts[2]) and
-                communityid.FlowTuple.is_port(parts[3])):
+                communityid.FlowTuple.is_port(dport)):
             return None, 'Need two IP addresses and port numbers'
 
         try:
-            return communityid.FlowTuple(proto, parts[0], parts[2],
-                                         int(parts[1]), int(parts[3])), None
+            return communityid.FlowTuple(
+                proto, parts[0], parts[2], sport, dport), None
         except communityid.FlowTupleError as err:
             return None, repr(err)
 

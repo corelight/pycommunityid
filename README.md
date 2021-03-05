@@ -5,7 +5,7 @@ This package provides a Python implementation of the open
 [Community ID](https://github.com/corelight/community-id-spec)
 flow hashing standard.
 
-It supports Python versions 2.7+ and 3+.
+It supports Python versions 2.7+ (for not much longer) and 3+.
 
 ![example foobar](https://github.com/corelight/pycommunityid/actions/workflows/python.yaml/badge.svg)
 

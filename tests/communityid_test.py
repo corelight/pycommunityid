@@ -231,6 +231,12 @@ class TestCommunityID(unittest.TestCase):
                  '1:LQU9qZlK+B5F3KDmev6m5PMibrg=',
                  '1:2d053da9994af81e45dca0e67afea6e4f3226eb8',
                  '1:3V71V58M3Ksw/yuFALMcW0LAHvc='],
+
+                # Verify https://github.com/corelight/pycommunityid/issues/3
+                ['10.0.0.1', '10.0.0.2', 10, 11569,
+                 '1:SXBGMX1lBOwhhoDrZynfROxnhnM=',
+                 '1:497046317d6504ec218680eb6729df44ec678673',
+                 '1:HmBRGR+fUyXF4t8WEtal7Y0gEAo='],
             ],
             communityid.FlowTuple.make_tcp,
             communityid.PROTO_TCP,
@@ -309,6 +315,14 @@ class TestCommunityID(unittest.TestCase):
         with self.assertRaises(communityid.FlowTupleError):
             tpl = communityid.FlowTuple(
                 communityid.PROTO_TCP, '1.2.3.4', '5.6.7.8')
+
+    @unittest.skipIf(sys.version_info[0] < 3, 'not supported in Python 2.x')
+    def test_inputs_py3(self):
+        # Python 3 allows us to distinguish strings and byte sequences,
+        # and the following test only applies to it.
+        with self.assertRaises(communityid.FlowTupleError):
+            tpl = communityid.FlowTuple(
+                communityid.PROTO_TCP, '1.2.3.4', '5.6.7.8', 23, "80")
 
     def test_get_proto(self):
         self.assertEqual(communityid.get_proto(23), 23)
