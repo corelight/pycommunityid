@@ -1,4 +1,4 @@
-#! /bin/env python
+#! /usr/bin/env python
 """
 Unit & functional tests for the Community ID package. Run with something like:
 
@@ -352,25 +352,35 @@ class TestCommands(unittest.TestCase):
 
         self.env['PYTHONPATH'] = ppath
 
+    def _scriptpath(self, scriptname):
+        return os.path.abspath(os.path.join(LOCAL_DIR, '..', 'scripts', scriptname))
+
+    def _testfilepath(self, testfile):
+        return os.path.abspath(os.path.join(LOCAL_DIR, testfile))
+
     def test_communityid(self):
         out = subprocess.check_output(
-            ['../scripts/community-id', 'tcp', '10.0.0.1', '10.0.0.2', '10', '20'],
+            [self._scriptpath('community-id'), 'tcp', '10.0.0.1', '10.0.0.2', '10', '20'],
             env=self.env)
         self.assertEqual(out, b'1:9j2Dzwrw7T9E+IZi4b4IVT66HBI=\n')
 
-    def test_communityid_pcap(self):
-        out = subprocess.check_output(
-            ['../scripts/community-id-pcap', 'tcp.pcap'],
-            env=self.env)
+    def _check_output_community_id_pcap(self, args):
+        try:
+            args = [self._scriptpath('community-id-pcap')] + args
+            return subprocess.check_output(args, env=self.env)
+        except subprocess.CalledProcessError as err:
+            if err.output.find(b'This needs the dpkt Python module') < 0:
+                raise
+            self.skipTest("This test requires dpkt")
 
+    def test_communityid_pcap(self):
+        # This only works if we have dpkt
+        out = self._check_output_community_id_pcap([self._testfilepath('tcp.pcap')])
         first_line = out.decode('ascii').split('\n')[0].strip()
         self.assertEqual(first_line, '1071580904.891921 | 1:LQU9qZlK+B5F3KDmev6m5PMibrg= | 128.232.110.120 66.35.250.204 6 34855 80')
 
     def test_communityid_pcap_json(self):
-        out = subprocess.check_output(
-            ['../scripts/community-id-pcap', '--json', 'tcp.pcap'],
-            env=self.env)
-
+        out = self._check_output_community_id_pcap(['--json', self._testfilepath('tcp.pcap')])
         self.assertEqual(out, b'[{"proto": 6, "saddr": "128.232.110.120", "daddr": "66.35.250.204", "sport": 34855, "dport": 80, "communityid": "1:LQU9qZlK+B5F3KDmev6m5PMibrg="}, {"proto": 6, "saddr": "66.35.250.204", "daddr": "128.232.110.120", "sport": 80, "dport": 34855, "communityid": "1:LQU9qZlK+B5F3KDmev6m5PMibrg="}]\n')
 
     def test_communityid_tcpdump(self):
@@ -379,7 +389,7 @@ class TestCommands(unittest.TestCase):
             self.skipTest('Needs Python 3.4 or greater')
 
         out = subprocess.check_output(
-            ['../scripts/community-id-tcpdump'], input=b'1071580904.891921 IP 128.232.110.120.34855 > 66.35.250.204.80: Flags [S], seq 3201037957, win 5840, options [mss 1460,sackOK,TS val 87269134 ecr 0,nop,wscale 0], length 0',
+            [self._scriptpath('community-id-tcpdump')], input=b'1071580904.891921 IP 128.232.110.120.34855 > 66.35.250.204.80: Flags [S], seq 3201037957, win 5840, options [mss 1460,sackOK,TS val 87269134 ecr 0,nop,wscale 0], length 0',
             env=self.env)
 
         first_line = out.decode('ascii').split('\n')[0].strip()
