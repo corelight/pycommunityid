@@ -57,9 +57,10 @@ class FlowTuple:
         representations.
 
         The sport and dport arguments are numeric port numbers, either
-        provided as ints or in packed 16-bit network byte order. When
-        the protocol number is one of PORT_PROTOS (TCP, UDP, etc),
-        they are required. For other IP protocols they are optional.
+        provided as ints or in packed 16-bit network byte order, of
+        type "bytes". When the protocol number is one of PORT_PROTOS
+        (TCP, UDP, etc), they are required. For other IP protocols
+        they are optional.
 
         The optional Boolean is_one_way argument indicates whether the
         tuple captures a bidirectional flow (the default) or
@@ -245,17 +246,15 @@ class FlowTuple:
 
     @staticmethod
     def is_port(val):
-        try:
-            port = int(val)
-            return 0 <= port <= 65535
-        except ValueError:
-            pass
+        if isinstance(val, bytes):
+            try:
+                port = struct.unpack('!H', val)[0]
+                return 0 <= port <= 65535
+            except (struct.error, IndexError, TypeError):
+                pass
 
-        try:
-            port = struct.unpack('!H', val)[0]
-            return 0 <= port <= 65535
-        except (struct.error, IndexError, TypeError):
-            pass
+        if isinstance(val, int):
+            return 0 <= val <= 65535
 
         return False
 
