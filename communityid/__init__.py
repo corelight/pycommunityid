@@ -8,8 +8,8 @@ submodules.
 from communityid.error import Error, FlowTupleError
 from communityid.algo import FlowTuple
 from communityid.algo import CommunityID
-from communityid.algo import (PROTO_ICMP, PROTO_TCP, PROTO_UDP, PROTO_ICMP6,
-                              PROTO_SCTP, PORT_PROTOS)
+from communityid.algo import PROTO_ICMP, PROTO_TCP, PROTO_UDP, PROTO_ICMP6, PROTO_SCTP, PORT_PROTOS
+
 
 def get_proto(proto):
     """

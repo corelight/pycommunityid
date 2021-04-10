@@ -29,6 +29,7 @@ PROTO_SCTP = 132
 # five-tuple.
 PORT_PROTOS = set([PROTO_ICMP, PROTO_TCP, PROTO_UDP, PROTO_ICMP6, PROTO_SCTP])
 
+
 class FlowTuple:
     """
     Tuples of network flow endpoints, used as input for the Community
@@ -38,11 +39,10 @@ class FlowTuple:
     pairs, plus IP protocol number, but port-less tuples are supported
     for less common IP payloads.
     """
-    Data = collections.namedtuple(
-        'Data', ['proto', 'saddr', 'daddr', 'sport', 'dport'])
 
-    def __init__(self, proto, saddr, daddr, sport=None, dport=None,
-                 is_one_way=False):
+    Data = collections.namedtuple("Data", ["proto", "saddr", "daddr", "sport", "dport"])
+
+    def __init__(self, proto, saddr, daddr, sport=None, dport=None, is_one_way=False):
         """Tuple initializer.
 
         The proto argument is a non-negative integer and represents an
@@ -76,19 +76,18 @@ class FlowTuple:
         self.sport, self.dport = sport, dport
 
         if proto is None or type(proto) != int:
-            raise error.FlowTupleError('Need numeric protocol number')
+            raise error.FlowTupleError("Need numeric protocol number")
 
         if saddr is None or daddr is None:
-            raise error.FlowTupleError('Need source and destination address')
+            raise error.FlowTupleError("Need source and destination address")
 
         if not self.is_ipaddr(saddr):
             raise error.FlowTupleError('Unsupported format for source IP address "%s"' % saddr)
         if not self.is_ipaddr(daddr):
             raise error.FlowTupleError('Unsupported format for destination IP address "%s"' % daddr)
 
-        if ((sport is None and dport is not None) or
-            (dport is None and sport is not None)):
-            raise error.FlowTupleError('Need either both or no port numbers')
+        if (sport is None and dport is not None) or (dport is None and sport is not None):
+            raise error.FlowTupleError("Need either both or no port numbers")
 
         if sport is not None and not self.is_port(sport):
             raise error.FlowTupleError('Source port "%s" invalid' % sport)
@@ -96,7 +95,7 @@ class FlowTuple:
             raise error.FlowTupleError('Destination port "%s" invalid' % dport)
 
         if proto in PORT_PROTOS and sport is None:
-            raise error.FlowTupleError('Need port numbers for port-enabled protocol %s' % proto)
+            raise error.FlowTupleError("Need port numbers for port-enabled protocol %s" % proto)
 
         # Our ICMP handling directly mirrors that of Zeek, since it
         # tries hardest to map ICMP into traditional 5-tuples. For
@@ -119,13 +118,11 @@ class FlowTuple:
         # works only with regular ints.
         if self.is_one_way is False:
             if self.proto == PROTO_ICMP:
-                sport, dport, self.is_one_way = icmp.get_port_equivalents(
-                    self._port_to_int(sport), self._port_to_int(dport))
+                sport, dport, self.is_one_way = icmp.get_port_equivalents(self._port_to_int(sport), self._port_to_int(dport))
                 self.sport = self._port_to_same(sport, self.sport)
                 self.dport = self._port_to_same(dport, self.dport)
             elif self.proto == PROTO_ICMP6:
-                sport, dport, self.is_one_way = icmp6.get_port_equivalents(
-                    self._port_to_int(sport), self._port_to_int(dport))
+                sport, dport, self.is_one_way = icmp6.get_port_equivalents(self._port_to_int(sport), self._port_to_int(dport))
                 self.sport = self._port_to_same(sport, self.sport)
                 self.dport = self._port_to_same(dport, self.dport)
 
@@ -133,10 +130,9 @@ class FlowTuple:
         data = self.get_data()
 
         if data.sport is None or data.dport is None:
-            return '[%s] %s -> %s' % (data.proto, data.saddr, data.daddr)
+            return "[%s] %s -> %s" % (data.proto, data.saddr, data.daddr)
 
-        return '[%s] %s/%s -> %s/%s' % (data.proto, data.saddr, data.sport,
-                                        data.daddr, data.dport)
+        return "[%s] %s/%s -> %s/%s" % (data.proto, data.saddr, data.sport, data.daddr, data.dport)
 
     def get_data(self):
         """
@@ -165,17 +161,18 @@ class FlowTuple:
             daddr = self._addr_to_ascii(daddr)
 
         if sport is not None and not isinstance(sport, int):
-            sport = struct.unpack('!H', sport)[0]
+            sport = struct.unpack("!H", sport)[0]
         if dport is not None and not isinstance(dport, int):
-            dport = struct.unpack('!H', dport)[0]
+            dport = struct.unpack("!H", dport)[0]
 
         return FlowTuple.Data(self.proto, saddr, daddr, sport, dport)
 
     def is_ordered(self):
-        return (self.is_one_way or self.saddr < self.daddr or
-                (self.saddr == self.daddr and
-                 self.sport is not None and self.dport is not None and
-                 self.sport < self.dport))
+        return (
+            self.is_one_way
+            or self.saddr < self.daddr
+            or (self.saddr == self.daddr and self.sport is not None and self.dport is not None and self.sport < self.dport)
+        )
 
     def has_ports(self):
         return self.sport is not None and self.dport is not None
@@ -187,10 +184,8 @@ class FlowTuple:
         will be sorted the same way.
         """
         if self.is_ordered():
-            return FlowTuple(self.proto, self.saddr, self.daddr,
-                             self.sport, self.dport, self.is_one_way)
-        return FlowTuple(self.proto, self.daddr, self.saddr,
-                         self.dport, self.sport, self.is_one_way)
+            return FlowTuple(self.proto, self.saddr, self.daddr, self.sport, self.dport, self.is_one_way)
+        return FlowTuple(self.proto, self.daddr, self.saddr, self.dport, self.sport, self.is_one_way)
 
     def in_nbo(self):
         """
@@ -201,12 +196,12 @@ class FlowTuple:
         daddr = self._addr_to_nbo(self.daddr)
 
         if isinstance(self.sport, int):
-            sport = struct.pack('!H', self.sport)
+            sport = struct.pack("!H", self.sport)
         else:
             sport = self.sport
 
         if isinstance(self.dport, int):
-            dport = struct.pack('!H', self.dport)
+            dport = struct.pack("!H", self.dport)
         else:
             dport = self.dport
 
@@ -214,9 +209,7 @@ class FlowTuple:
 
     @staticmethod
     def is_ipaddr(val):
-        return (FlowTuple.addr_is_text(val) or
-                FlowTuple.addr_is_packed(val) or
-                FlowTuple.addr_is_ipaddress_type(val))
+        return FlowTuple.addr_is_text(val) or FlowTuple.addr_is_packed(val) or FlowTuple.addr_is_ipaddress_type(val)
 
     @staticmethod
     def addr_is_text(addr):
@@ -248,7 +241,7 @@ class FlowTuple:
     def is_port(val):
         if isinstance(val, bytes):
             try:
-                port = struct.unpack('!H', val)[0]
+                port = struct.unpack("!H", val)[0]
                 return 0 <= port <= 65535
             except (struct.error, IndexError, TypeError):
                 pass
@@ -264,13 +257,13 @@ class FlowTuple:
         if isinstance(port, int):
             return port
         # Assume it's two bytes in NBO:
-        return struct.unpack('!H', port)[0]
+        return struct.unpack("!H", port)[0]
 
     @staticmethod
     def _port_to_nbo(port):
         """Convert a port number to 2-byte NBO."""
         if isinstance(port, int):
-            return struct.pack('!H', port)
+            return struct.pack("!H", port)
         # Assume it's two bytes in NBO
         return port
 
@@ -377,6 +370,7 @@ class CommunityID(CommunityIDBase):
     """
     An algorithm object that computes Community IDs on FlowTuple instances.
     """
+
     def __init__(self, seed=0, use_base64=True):
         self._version = 1
         self._seed = seed
@@ -384,8 +378,7 @@ class CommunityID(CommunityIDBase):
         self._err = None
 
     def __repr__(self):
-        return 'CommunityID(v=%s,seed=%s,base64=%s)' \
-            % (self._version, self._seed, self._use_base64)
+        return "CommunityID(v=%s,seed=%s,base64=%s)" % (self._version, self._seed, self._use_base64)
 
     def get_error(self):
         """
@@ -410,28 +403,28 @@ class CommunityID(CommunityIDBase):
 
         def hash_update(data):
             # Handy for troubleshooting: shows exact byte sequence hashed
-            #hexbytes = ':'.join('%02x' % ord(b) for b in data)
-            #print('XXX %s' % hexbytes)
+            # hexbytes = ':'.join('%02x' % ord(b) for b in data)
+            # print('XXX %s' % hexbytes)
             hashstate.update(data)
             return len(data)
 
         try:
-            dlen = hash_update(struct.pack('!H', self._seed)) # 2-byte seed
-            dlen += hash_update(tpl.saddr) # 4 bytes (v4 addr) or 16 bytes (v6 addr)
-            dlen += hash_update(tpl.daddr) # 4 bytes (v4 addr) or 16 bytes (v6 addr)
-            dlen += hash_update(struct.pack('B', tpl.proto)) # 1 byte for transport proto
-            dlen += hash_update(struct.pack('B', 0)) # 1 byte padding
+            dlen = hash_update(struct.pack("!H", self._seed))  # 2-byte seed
+            dlen += hash_update(tpl.saddr)  # 4 bytes (v4 addr) or 16 bytes (v6 addr)
+            dlen += hash_update(tpl.daddr)  # 4 bytes (v4 addr) or 16 bytes (v6 addr)
+            dlen += hash_update(struct.pack("B", tpl.proto))  # 1 byte for transport proto
+            dlen += hash_update(struct.pack("B", 0))  # 1 byte padding
             if tpl.has_ports():
-                dlen += hash_update(tpl.sport) # 2 bytes
-                dlen += hash_update(tpl.dport) # 2 bytes
+                dlen += hash_update(tpl.sport)  # 2 bytes
+                dlen += hash_update(tpl.dport)  # 2 bytes
         except struct.error as err:
-            self._err = 'Could not pack flow tuple: %s' % err
+            self._err = "Could not pack flow tuple: %s" % err
             return None
 
         # The data structure we hash should always align on 32-bit
         # boundaries.
         if dlen % 4 != 0:
-            self._err = 'Unexpected hash input length: %s' % dlen
+            self._err = "Unexpected hash input length: %s" % dlen
             return None
 
         return hashstate
@@ -443,6 +436,6 @@ class CommunityID(CommunityIDBase):
         # Unless the user disabled the feature, base64-encode the
         # (binary) hash digest. Otherwise, print the ASCII digest.
         if self._use_base64:
-            return str(self._version) + ':' + base64.b64encode(hashstate.digest()).decode('ascii')
+            return str(self._version) + ":" + base64.b64encode(hashstate.digest()).decode("ascii")
 
-        return str(self._version) + ':' + hashstate.hexdigest()
+        return str(self._version) + ":" + hashstate.hexdigest()

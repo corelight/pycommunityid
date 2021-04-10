@@ -12,7 +12,7 @@ try:
         # To make this work with the Python 2 backport we need to
         # convert the input to Unicode, portably.
         # http://python-future.org/compatible_idioms.html#unicode
-        return ipaddress.ip_address(u"%s" % addr)
+        return ipaddress.ip_address("%s" % addr)
 
     def is_ipaddress_type(obj):
         """
@@ -20,12 +20,16 @@ try:
         address object.
         """
         return isinstance(obj, (ipaddress.IPv4Address, ipaddress.IPv6Address))
+
+
 except ImportError:
+
     def ip_address(_):
-        raise RuntimeError('ipaddress module not available')
+        raise RuntimeError("ipaddress module not available")
 
     def is_ipaddress_type(_):
         return False
+
 
 def have_real_bytes_type():
     # These differ in Python 3, but are the same in Python 2

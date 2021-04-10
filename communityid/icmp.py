@@ -15,17 +15,18 @@ MASK = 17
 MASK_REPLY = 18
 
 TYPE_MAPPER = {
-    ECHO:            ECHO_REPLY,
-    ECHO_REPLY:      ECHO,
-    TSTAMP:          TSTAMP_REPLY,
-    TSTAMP_REPLY:    TSTAMP,
-    INFO:            INFO_REPLY,
-    INFO_REPLY:      INFO,
-    RTR_SOLICIT:     RTR_ADVERT,
-    RTR_ADVERT:      RTR_SOLICIT,
-    MASK:            MASK_REPLY,
-    MASK_REPLY:      MASK,
+    ECHO: ECHO_REPLY,
+    ECHO_REPLY: ECHO,
+    TSTAMP: TSTAMP_REPLY,
+    TSTAMP_REPLY: TSTAMP,
+    INFO: INFO_REPLY,
+    INFO_REPLY: INFO,
+    RTR_SOLICIT: RTR_ADVERT,
+    RTR_ADVERT: RTR_SOLICIT,
+    MASK: MASK_REPLY,
+    MASK_REPLY: MASK,
 }
+
 
 def get_port_equivalents(mtype, mcode):
     """
