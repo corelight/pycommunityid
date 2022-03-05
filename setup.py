@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="communityid",
-    version="1.3",
+    version="1.4",
     author="Christian Kreibich",
     author_email="christian@corelight.com",
     description="Community ID flow hashing",
