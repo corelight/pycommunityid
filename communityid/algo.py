@@ -5,6 +5,7 @@ import abc
 import base64
 import collections
 import hashlib
+import logging
 import socket
 import string
 import struct
@@ -13,6 +14,8 @@ from communityid import error
 from communityid import compat
 from communityid import icmp
 from communityid import icmp6
+
+from . import LOG
 
 # Proper enums here would be nice, but this aims to support Python
 # 2.7+ and while there are ways to get "proper" enums pre-3.0, it just
