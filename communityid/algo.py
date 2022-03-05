@@ -5,6 +5,7 @@ import abc
 import base64
 import collections
 import hashlib
+import logging
 import socket
 import string
 import struct
@@ -13,6 +14,8 @@ from communityid import error
 from communityid import compat
 from communityid import icmp
 from communityid import icmp6
+
+from . import LOG
 
 # Proper enums here would be nice, but this aims to support Python
 # 2.7+ and while there are ways to get "proper" enums pre-3.0, it just
@@ -131,12 +134,14 @@ class FlowTuple:
 
     def __repr__(self):
         data = self.get_data()
+        ordered = 'ordered' if self.is_ordered() else 'flipped'
 
         if data.sport is None or data.dport is None:
-            return '[%s] %s -> %s' % (data.proto, data.saddr, data.daddr)
+            return '%s -> %s, proto %s, %s' % (
+                data.saddr, data.daddr, data.proto, ordered)
 
-        return '[%s] %s/%s -> %s/%s' % (data.proto, data.saddr, data.sport,
-                                        data.daddr, data.dport)
+        return '%s %s -> %s %s, proto %s, %s' % (
+            data.saddr, data.sport, data.daddr, data.dport, data.proto, ordered)
 
     def get_data(self):
         """
@@ -172,19 +177,37 @@ class FlowTuple:
         return FlowTuple.Data(self.proto, saddr, daddr, sport, dport)
 
     def is_ordered(self):
-        return (self.is_one_way or self.saddr < self.daddr or
-                (self.saddr == self.daddr and
-                 self.sport is not None and self.dport is not None and
-                 self.sport < self.dport))
+        """
+        Predicate, returns True when this flow tuple is ordered.
+
+        A flow tuple is ordered when any of the following are true:
+
+        - It's marked as a one-way flow.
+
+        - Its source IP address is smaller than its dest IP address, both in
+          network byte order (NBO).
+
+        - The IP addresses are equal and the source port is smaller than the
+          dest port, in NBO.
+        """
+        nbo = self.in_nbo()
+        return (nbo.is_one_way or nbo.saddr < nbo.daddr or
+                (nbo.saddr == nbo.daddr and
+                 nbo.sport is not None and nbo.dport is not None and
+                 nbo.sport < nbo.dport))
 
     def has_ports(self):
+        """
+        Predicate, returns True when this tuple features port numbers.
+        """
         return self.sport is not None and self.dport is not None
 
     def in_order(self):
         """
-        Returns a copy of this tuple that is ordered canonically. Ie,
-        regardless of the direction of src/dest, the returned tuple
-        will be sorted the same way.
+        Returns a copy of this tuple that is ordered canonically. Ie, regardless
+        of the src/dest IP addresses and ports, the returned tuple will be be
+        the same: the source side will contain the smaller endpoint (see
+        FlowTuple.is_ordered() for details).
         """
         if self.is_ordered():
             return FlowTuple(self.proto, self.saddr, self.daddr,
@@ -402,36 +425,46 @@ class CommunityID(CommunityIDBase):
         None. In that case consider get_error() to learn more about
         what happened.
         """
+        LOG.info('CommunityID for %s:' % tpl)
         tpl = tpl.in_nbo().in_order()
         return self.render(self.hash(tpl))
 
     def hash(self, tpl):
         hashstate = hashlib.sha1()
 
-        def hash_update(data):
-            # Handy for troubleshooting: shows exact byte sequence hashed
-            #hexbytes = ':'.join('%02x' % ord(b) for b in data)
-            #print('XXX %s' % hexbytes)
+        def hash_update(data, context):
+            # Handy for troubleshooting: show the hashed byte sequence
+            # when verbosity level is at least INFO (-vv):
+            if LOG.isEnabledFor(logging.INFO):
+                # On Python 2.7 the data comes as a string, later it's bytes.
+                # The difference matters for rendering the byte hex values.
+                if isinstance(data, str):
+                    hexbytes = ':'.join('%02x' % ord(b) for b in data)
+                else:
+                    hexbytes = ':'.join('%02x' % b for b in data)
+                LOG.info('| %-7s %s' % (context, hexbytes))
             hashstate.update(data)
             return len(data)
 
         try:
-            dlen = hash_update(struct.pack('!H', self._seed)) # 2-byte seed
-            dlen += hash_update(tpl.saddr) # 4 bytes (v4 addr) or 16 bytes (v6 addr)
-            dlen += hash_update(tpl.daddr) # 4 bytes (v4 addr) or 16 bytes (v6 addr)
-            dlen += hash_update(struct.pack('B', tpl.proto)) # 1 byte for transport proto
-            dlen += hash_update(struct.pack('B', 0)) # 1 byte padding
+            dlen = hash_update(struct.pack('!H', self._seed), 'seed') # 2-byte seed
+            dlen += hash_update(tpl.saddr, 'ipaddr') # 4 bytes (v4 addr) or 16 bytes (v6 addr)
+            dlen += hash_update(tpl.daddr, 'ipaddr') # 4 bytes (v4 addr) or 16 bytes (v6 addr)
+            dlen += hash_update(struct.pack('B', tpl.proto), 'proto') # 1 byte for transport proto
+            dlen += hash_update(struct.pack('B', 0), 'padding') # 1 byte padding
             if tpl.has_ports():
-                dlen += hash_update(tpl.sport) # 2 bytes
-                dlen += hash_update(tpl.dport) # 2 bytes
+                dlen += hash_update(tpl.sport, 'port') # 2 bytes
+                dlen += hash_update(tpl.dport, 'port') # 2 bytes
         except struct.error as err:
             self._err = 'Could not pack flow tuple: %s' % err
+            LOG.warning(self._err)
             return None
 
         # The data structure we hash should always align on 32-bit
         # boundaries.
         if dlen % 4 != 0:
             self._err = 'Unexpected hash input length: %s' % dlen
+            LOG.warning(self._err)
             return None
 
         return hashstate

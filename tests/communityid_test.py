@@ -378,6 +378,21 @@ class TestCommands(unittest.TestCase):
             env=self.env)
         self.assertEqual(out, b'1:9j2Dzwrw7T9E+IZi4b4IVT66HBI=\n')
 
+    def test_communityid_verbose(self):
+        out = subprocess.check_output(
+            [self._scriptpath('community-id'), '-vv', 'tcp', '10.0.0.1', '10.0.0.2', '10', '20'],
+            env=self.env, stderr=subprocess.STDOUT)
+        self.assertEqual(out, b"""INFO     CommunityID for 10.0.0.1 10 -> 10.0.0.2 20, proto 6, ordered:
+INFO     | seed    00:00
+INFO     | ipaddr  0a:00:00:01
+INFO     | ipaddr  0a:00:00:02
+INFO     | proto   06
+INFO     | padding 00
+INFO     | port    00:0a
+INFO     | port    00:14
+1:9j2Dzwrw7T9E+IZi4b4IVT66HBI=
+""")
+
     def _check_output_community_id_pcap(self, args):
         try:
             args = [self._scriptpath('community-id-pcap')] + args

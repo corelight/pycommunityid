@@ -5,6 +5,11 @@ We pull in all the objects and variables you'd commonly need. The user
 should be fine just importing this, and not need any of the
 submodules.
 """
+import logging
+
+LOG = logging.getLogger(__name__)
+LOG.addHandler(logging.NullHandler())
+
 from communityid.error import Error, FlowTupleError
 from communityid.algo import FlowTuple
 from communityid.algo import CommunityID

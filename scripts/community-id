@@ -5,6 +5,7 @@ You provide the tuple parts, it provides the ID.
 """
 import abc
 import argparse
+import logging
 import socket
 import sys
 
@@ -106,8 +107,9 @@ does not matter.
                         help='Seed value for hash operations')
     parser.add_argument('--no-base64', action='store_true', default=False,
                         help="Don't base64-encode the SHA1 binary value")
-    parser.add_argument('--verbose', action='store_true', default=False,
-                        help='Enable verbose output')
+    parser.add_argument('--verbose', '-v', action='count', default=0,
+                        help=('Enable verbose output. Use multiple times '
+                              'for more output (e.g. -vvv).'))
     parser.add_argument('flowtuple', nargs=argparse.REMAINDER,
                         help='Flow tuple, in one of the forms described above')
     args = parser.parse_args()
@@ -116,14 +118,27 @@ does not matter.
         sys.stderr.write('Need flow tuple as additional arguments.\n')
         return 1
 
+    if args.verbose > 0:
+        formatter = logging.Formatter('%(levelname)-8s %(message)s')
+        handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
+
+        if args.verbose == 1:
+            communityid.LOG.setLevel(logging.WARNING)
+        elif args.verbose == 2:
+            communityid.LOG.setLevel(logging.INFO)
+        elif args.verbose >= 3:
+            communityid.LOG.setLevel(logging.DEBUG)
+
+        communityid.LOG.addHandler(handler)
+
     commid = communityid.CommunityID(args.seed, not args.no_base64)
 
     for parser in (DefaultParser(), ZeekLogsParser()):
         tpl, msg = parser.parse(args.flowtuple)
         if tpl is None:
-            if args.verbose:
-                sys.stderr.write('%s failure: %s\n' %
-                                 (parser.__class__.__name__, msg))
+            communityid.LOG.debug(
+                '%s failure: %s\n' % (parser.__class__.__name__, msg))
             continue
 
         res = commid.calc(tpl)
