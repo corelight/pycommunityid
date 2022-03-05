@@ -175,19 +175,37 @@ class FlowTuple:
         return FlowTuple.Data(self.proto, saddr, daddr, sport, dport)
 
     def is_ordered(self):
-        return (self.is_one_way or self.saddr < self.daddr or
-                (self.saddr == self.daddr and
-                 self.sport is not None and self.dport is not None and
-                 self.sport < self.dport))
+        """
+        Predicate, returns True when this flow tuple is ordered.
+
+        A flow tuple is ordered when any of the following are true:
+
+        - It's marked as a one-way flow.
+
+        - Its source IP address is smaller than its dest IP address, both in
+          network byte order (NBO).
+
+        - The IP addresses are equal and the source port is smaller than the
+          dest port, in NBO.
+        """
+        nbo = self.in_nbo()
+        return (nbo.is_one_way or nbo.saddr < nbo.daddr or
+                (nbo.saddr == nbo.daddr and
+                 nbo.sport is not None and nbo.dport is not None and
+                 nbo.sport < nbo.dport))
 
     def has_ports(self):
+        """
+        Predicate, returns True when this tuple features port numbers.
+        """
         return self.sport is not None and self.dport is not None
 
     def in_order(self):
         """
-        Returns a copy of this tuple that is ordered canonically. Ie,
-        regardless of the direction of src/dest, the returned tuple
-        will be sorted the same way.
+        Returns a copy of this tuple that is ordered canonically. Ie, regardless
+        of the src/dest IP addresses and ports, the returned tuple will be be
+        the same: the source side will contain the smaller endpoint (see
+        FlowTuple.is_ordered() for details).
         """
         if self.is_ordered():
             return FlowTuple(self.proto, self.saddr, self.daddr,
