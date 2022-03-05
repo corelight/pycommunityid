@@ -134,12 +134,14 @@ class FlowTuple:
 
     def __repr__(self):
         data = self.get_data()
+        ordered = 'ordered' if self.is_ordered() else 'flipped'
 
         if data.sport is None or data.dport is None:
-            return '[%s] %s -> %s' % (data.proto, data.saddr, data.daddr)
+            return '%s -> %s, proto %s, %s' % (
+                data.saddr, data.daddr, data.proto, ordered)
 
-        return '[%s] %s/%s -> %s/%s' % (data.proto, data.saddr, data.sport,
-                                        data.daddr, data.dport)
+        return '%s %s -> %s %s, proto %s, %s' % (
+            data.saddr, data.sport, data.daddr, data.dport, data.proto, ordered)
 
     def get_data(self):
         """
