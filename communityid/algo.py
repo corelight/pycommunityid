@@ -425,36 +425,46 @@ class CommunityID(CommunityIDBase):
         None. In that case consider get_error() to learn more about
         what happened.
         """
+        LOG.info('CommunityID for %s:' % tpl)
         tpl = tpl.in_nbo().in_order()
         return self.render(self.hash(tpl))
 
     def hash(self, tpl):
         hashstate = hashlib.sha1()
 
-        def hash_update(data):
-            # Handy for troubleshooting: shows exact byte sequence hashed
-            #hexbytes = ':'.join('%02x' % ord(b) for b in data)
-            #print('XXX %s' % hexbytes)
+        def hash_update(data, context):
+            # Handy for troubleshooting: show the hashed byte sequence
+            # when verbosity level is at least INFO (-vv):
+            if LOG.isEnabledFor(logging.INFO):
+                # On Python 2.7 the data comes as a string, later it's bytes.
+                # The difference matters for rendering the byte hex values.
+                if isinstance(data, str):
+                    hexbytes = ':'.join('%02x' % ord(b) for b in data)
+                else:
+                    hexbytes = ':'.join('%02x' % b for b in data)
+                LOG.info('| %-7s %s' % (context, hexbytes))
             hashstate.update(data)
             return len(data)
 
         try:
-            dlen = hash_update(struct.pack('!H', self._seed)) # 2-byte seed
-            dlen += hash_update(tpl.saddr) # 4 bytes (v4 addr) or 16 bytes (v6 addr)
-            dlen += hash_update(tpl.daddr) # 4 bytes (v4 addr) or 16 bytes (v6 addr)
-            dlen += hash_update(struct.pack('B', tpl.proto)) # 1 byte for transport proto
-            dlen += hash_update(struct.pack('B', 0)) # 1 byte padding
+            dlen = hash_update(struct.pack('!H', self._seed), 'seed') # 2-byte seed
+            dlen += hash_update(tpl.saddr, 'ipaddr') # 4 bytes (v4 addr) or 16 bytes (v6 addr)
+            dlen += hash_update(tpl.daddr, 'ipaddr') # 4 bytes (v4 addr) or 16 bytes (v6 addr)
+            dlen += hash_update(struct.pack('B', tpl.proto), 'proto') # 1 byte for transport proto
+            dlen += hash_update(struct.pack('B', 0), 'padding') # 1 byte padding
             if tpl.has_ports():
-                dlen += hash_update(tpl.sport) # 2 bytes
-                dlen += hash_update(tpl.dport) # 2 bytes
+                dlen += hash_update(tpl.sport, 'port') # 2 bytes
+                dlen += hash_update(tpl.dport, 'port') # 2 bytes
         except struct.error as err:
             self._err = 'Could not pack flow tuple: %s' % err
+            LOG.warning(self._err)
             return None
 
         # The data structure we hash should always align on 32-bit
         # boundaries.
         if dlen % 4 != 0:
             self._err = 'Unexpected hash input length: %s' % dlen
+            LOG.warning(self._err)
             return None
 
         return hashstate
