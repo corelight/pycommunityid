@@ -412,7 +412,7 @@ INFO     | port    00:14
             with open(outfilename, "rb") as f:
                 bytes = f.read()
                 checksum = hashlib.sha256(bytes).hexdigest()
-                os.remove("output.pcap")
+                os.remove(outfilename)
                 return checksum
         except subprocess.CalledProcessError as err:
             if err.output.find(b'This needs the dpkt Python module') < 0:
