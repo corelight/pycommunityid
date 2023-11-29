@@ -55,6 +55,11 @@ The package includes three sample applications:
   exercices the package's "low-level" API, using flow tuple values as
   you'd encounter them in a typical network monitor.
 
+- [community-id-pcapfilter](https://github.com/corelight/pycommunityid/blob/master/scripts/community-id-pcapfilter),
+  which iterates over a pcap via dpkt and produces a pcap of
+  only those packets whose Community IDs have a specific value,
+  filtering out all others.
+
 - [community-id-tcpdump](https://github.com/corelight/pycommunityid/blob/master/scripts/community-id-tcpdump),
   which takes tcpdump output on stdin and
   augments it with Community ID values on stdout. This exercices the

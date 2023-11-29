@@ -13,6 +13,7 @@ import struct
 import subprocess
 import sys
 import unittest
+import hashlib
 
 try:
     import pylint.epylint
@@ -402,6 +403,22 @@ INFO     | port    00:14
                 raise
             self.skipTest("This test requires dpkt")
 
+    def _check_output_community_id_pcapfilter(self, args):
+        try:
+            args = [self._scriptpath('community-id-pcapfilter')] + args
+            subprocess.run(args, env=self.env)
+            outfileposition = args.index("--output") + 1
+            outfilename = args[outfileposition]
+            with open(outfilename, "rb") as f:
+                bytes = f.read()
+                checksum = hashlib.sha256(bytes).hexdigest()
+                os.remove(outfilename)
+                return checksum
+        except subprocess.CalledProcessError as err:
+            if err.output.find(b'This needs the dpkt Python module') < 0:
+                raise
+            self.skipTest("This test requires dpkt")
+
     def test_communityid_pcap(self):
         # This only works if we have dpkt
         out = self._check_output_community_id_pcap([self._testfilepath('tcp.pcap')])
@@ -411,6 +428,10 @@ INFO     | port    00:14
     def test_communityid_pcap_json(self):
         out = self._check_output_community_id_pcap(['--json', self._testfilepath('tcp.pcap')])
         self.assertEqual(out, b'[{"proto": 6, "saddr": "128.232.110.120", "daddr": "66.35.250.204", "sport": 34855, "dport": 80, "communityid": "1:LQU9qZlK+B5F3KDmev6m5PMibrg="}, {"proto": 6, "saddr": "66.35.250.204", "daddr": "128.232.110.120", "sport": 80, "dport": 34855, "communityid": "1:LQU9qZlK+B5F3KDmev6m5PMibrg="}]\n')
+
+    def test_communityid_pcapfilter(self):
+        out = self._check_output_community_id_pcapfilter(['--filter', '1:p78FQ5Gn8XFgjlKgugj92+uTUDk=', '--output', 'output.pcap', self._testfilepath('tcp_multi.pcap')])
+        self.assertEqual(out, 'f46ba2303318c400c257c08a2b70f412fc307694ede788baa96142b118b28a94')
 
     def test_communityid_tcpdump(self):
         # This uses subprocess.check_output(..., input=...) which was added in 3.4:
@@ -423,7 +444,6 @@ INFO     | port    00:14
 
         first_line = out.decode('ascii').split('\n')[0].strip()
         self.assertEqual(first_line, '1071580904.891921 IP 1:LQU9qZlK+B5F3KDmev6m5PMibrg= 128.232.110.120:34855 > 66.35.250.204.80: Flags [S], seq 3201037957, win 5840, options [mss 1460,sackOK,TS val 87269134 ecr 0,nop,wscale 0], length 0')
-
 
 if __name__ == '__main__':
     unittest.main()

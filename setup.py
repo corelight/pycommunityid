@@ -17,6 +17,7 @@ setuptools.setup(
     scripts=[
         'scripts/community-id',
         'scripts/community-id-pcap',
+        'scripts/community-id-pcapfilter',
         'scripts/community-id-tcpdump'],
     test_suite="tests.communityid_test",
     classifiers=[
